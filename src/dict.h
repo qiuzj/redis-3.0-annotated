@@ -80,7 +80,8 @@ typedef struct dictEntry {
 
 
 /*
- * 字典类型特定函数
+ * 字典类型特定函数.
+ * 一组用于操作特定类型键值对的函数，不同用途的字典使用不同的类型特定函数.
  */
 typedef struct dictType {
 
@@ -137,7 +138,7 @@ typedef struct dict {
     // 类型特定函数
     dictType *type;
 
-    // 私有数据
+    // 私有数据. 保存了需要会给那些类型特定函数的可选参数
     void *privdata;
 
     // 哈希表

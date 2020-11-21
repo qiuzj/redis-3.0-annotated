@@ -183,7 +183,7 @@ unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len) {
  */
 static void _dictReset(dictht *ht)
 {
-    ht->table = NULL; // 初始化时，table为NULL
+    ht->table = NULL; // 初始化时，table为NULL，暂未给table分配内存.
     ht->size = 0;
     ht->sizemask = 0;
     ht->used = 0;
@@ -195,12 +195,12 @@ static void _dictReset(dictht *ht)
  *
  * T = O(1)
  */
-dict *dictCreate(dictType *type,
-        void *privDataPtr)
+dict *dictCreate(dictType *type, // 一组用于操作特定类型键值对的函数，不同用途的字典使用不同的类型特定函数.
+        void *privDataPtr) // 保存了需要会给那些类型特定函数的可选参数
 {
     dict *d = zmalloc(sizeof(*d)); // 为字典对象分配内存
 
-    _dictInit(d,type,privDataPtr); // 重置2个ht，初始化字典各个字段
+    _dictInit(d, type, privDataPtr); // 重置2个ht，初始化字典各个字段
 
     return d;
 }
@@ -214,8 +214,7 @@ dict *dictCreate(dictType *type,
 int _dictInit(dict *d, dictType *type,
         void *privDataPtr)
 {
-    // 初始化两个哈希表的各项属性值
-    // 但暂时还不分配内存给哈希表数组
+    // 初始化两个哈希表的各项属性值. 但暂时还不分配内存给哈希表数组
     _dictReset(&d->ht[0]);
     _dictReset(&d->ht[1]);
 
@@ -225,7 +224,7 @@ int _dictInit(dict *d, dictType *type,
     // 设置私有数据
     d->privdata = privDataPtr;
 
-    // 设置哈希表 rehash 状态
+    // 设置哈希表 rehash 状态. 当 rehash 不在进行时，值为 -1
     d->rehashidx = -1;
 
     // 设置字典的安全迭代器数量
@@ -475,7 +474,7 @@ int dictRehashMilliseconds(dict *d, int ms) {
  * T = O(1)
  */
 static void _dictRehashStep(dict *d) {
-    if (d->iterators == 0) dictRehash(d,1);
+    if (d->iterators == 0) dictRehash(d, 1);
 }
 
 /* Add an element to the target hash table */
@@ -648,8 +647,7 @@ dictEntry *dictReplaceRaw(dict *d, void *key) {
 /*
  * 查找并删除包含给定键的节点
  *
- * 参数 nofree 决定是否调用键和值的释放函数
- * 0 表示调用，1 表示不调用
+ * 参数 nofree 决定是否调用键和值的释放函数. 0 表示调用释放函数，1 表示不调用.
  *
  * 找到并成功删除返回 DICT_OK ，没找到则返回 DICT_ERR
  *
@@ -678,6 +676,7 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
         idx = h & d->ht[table].sizemask;
         // 指向该索引上的链表
         he = d->ht[table].table[idx];
+        // 默认前驱节点为NULL
         prevHe = NULL;
         // 遍历链表上的所有节点
         // T = O(1)
@@ -688,12 +687,12 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
 
                 /* Unlink the element from the list */
                 // 从链表中删除
-                if (prevHe) // 删除非头节点
+                if (prevHe) // 删除非头节点. 将前驱节点指向当前节点的后继节点
                     prevHe->next = he->next;
-                else // 删除头节点
+                else // 删除头节点. prevHe为NULL，表示he为头节点
                     d->ht[table].table[idx] = he->next;
 
-                // 释放调用键和值的释放函数？
+                // 释放字典节点的键和值
                 if (!nofree) {
                     dictFreeKey(d, he);
                     dictFreeVal(d, he);
@@ -709,8 +708,8 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
                 return DICT_OK;
             }
 
-            prevHe = he;
-            he = he->next;
+            prevHe = he; // 更新前驱节点为当前节点
+            he = he->next; // 更新当前节点为下一个节点
         }
 
         // 如果执行到这里，说明在 0 号哈希表中找不到给定键
@@ -731,7 +730,7 @@ static int dictGenericDelete(dict *d, const void *key, int nofree)
  * T = O(1)
  */
 int dictDelete(dict *ht, const void *key) {
-    return dictGenericDelete(ht,key,0);
+    return dictGenericDelete(ht, key, 0);
 }
 
 /*
@@ -820,7 +819,7 @@ void dictRelease(dict *d)
  */
 dictEntry *dictFind(dict *d, const void *key)
 {
-    dictEntry *he;
+    dictEntry *he; // he是hash entry的简称吧
     unsigned int h, idx, table;
 
     // 字典（的哈希表）为空
@@ -831,6 +830,7 @@ dictEntry *dictFind(dict *d, const void *key)
 
     // 计算键的哈希值
     h = dictHashKey(d, key);
+
     // 在字典的哈希表中查找这个键
     // T = O(1)
     for (table = 0; table <= 1; table++) {
@@ -838,15 +838,17 @@ dictEntry *dictFind(dict *d, const void *key)
         // 计算索引值
         idx = h & d->ht[table].sizemask;
 
-        // 遍历给定索引上的链表的所有节点，查找 key
+        // 索引值对应的哈希表位桶头节点
         he = d->ht[table].table[idx];
+
         // T = O(1)
+        // 遍历给定索引上的链表的所有节点，查找 key
         while(he) {
-
+            // 比较链表上的当前节点he->key，是否为要查找的节点key
             if (dictCompareKeys(d, key, he->key))
-                return he;
+                return he; // 找到则返回节点对象
 
-            he = he->next;
+            he = he->next; // he指向下一个节点，用于下一轮查找
         }
 
         // 如果程序遍历完 0 号哈希表，仍然没找到指定的键的节点
@@ -871,7 +873,7 @@ void *dictFetchValue(dict *d, const void *key) {
     dictEntry *he;
 
     // T = O(1)
-    he = dictFind(d,key);
+    he = dictFind(d, key);
 
     return he ? dictGetVal(he) : NULL;
 }
@@ -1477,7 +1479,8 @@ static int _dictKeyIndex(dict *d, const void *key)
     // 计算 key 的哈希值
     h = dictHashKey(d, key);
 
-    // T = O(1)
+    // T = O(1).
+    // 总是先遍历第0个哈希表。如果找不到，并且正在执行rehash，再遍历第1个哈希表。
     for (table = 0; table <= 1; table++) {
 
         // 计算索引值
@@ -1489,7 +1492,7 @@ static int _dictKeyIndex(dict *d, const void *key)
         he = d->ht[table].table[idx];
         while(he) {
             if (dictCompareKeys(d, key, he->key))
-                return -1;
+                return -1; // 已存在
             he = he->next;
         }
 
