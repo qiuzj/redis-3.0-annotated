@@ -73,7 +73,7 @@ typedef struct dictEntry {
         int64_t s64;
     } v;
 
-    // 指向下个哈希表节点，形成链表
+    // 指向下个哈希表节点，形成单向链表
     struct dictEntry *next;
 
 } dictEntry;
@@ -144,7 +144,8 @@ typedef struct dict {
     dictht ht[2];
 
     // rehash 索引
-    // 当 rehash 不在进行时，值为 -1
+    // 当 rehash 不在进行时，值为 -1. 为0时表示准备进行增量哈希迁移
+    // 当值不为-1时，表示字典正在 rehash
     int rehashidx; /* rehashing not in progress if rehashidx == -1 */
 
     // 目前正在运行的安全迭代器的数量
