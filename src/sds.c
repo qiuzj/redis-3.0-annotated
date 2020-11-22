@@ -38,7 +38,7 @@
 
 /*
  * 根据给定的初始化字符串 init 和字符串长度 initlen
- * 创建一个新的 sds
+ * 创建一个新的 sds, buf数组的长度为 initlen+1
  *
  * 参数
  *  init ：初始化字符串指针
@@ -67,10 +67,11 @@ sds sdsnewlen(const void *init, size_t initlen) {
 
     struct sdshdr *sh;
 
+    // 1.分配内存
     // 根据是否有初始化内容，选择适当的内存分配方式
     // T = O(N)
     if (init) {
-        // zmalloc 不初始化所分配的内存
+        // zmalloc 不初始化所分配的内存. 长度为：sdshdr中2个int字段的长度 + init字符串的长度 + 预留1个空字符
         sh = zmalloc(sizeof(struct sdshdr)+initlen+1);
     } else {
         // zcalloc 将分配的内存全部初始化为 0
@@ -80,10 +81,13 @@ sds sdsnewlen(const void *init, size_t initlen) {
     // 内存分配失败，返回
     if (sh == NULL) return NULL;
 
+    // 2.设置sdshdr的长度字段
     // 设置初始化长度
     sh->len = initlen;
     // 新 sds 不预留任何空间
     sh->free = 0;
+
+    // 3.将init字符串复制到新创建的sdshdr中
     // 如果有指定初始化内容，将它们复制到 sdshdr 的 buf 中
     // T = O(N)
     if (initlen && init)
@@ -108,7 +112,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
 /* Create an empty (zero length) sds string. Even in this case the string
  * always has an implicit null term. */
 sds sdsempty(void) {
-    return sdsnewlen("",0);
+    return sdsnewlen("", 0);
 }
 
 /*
@@ -127,8 +131,8 @@ sds sdsempty(void) {
  */
 /* Create a new sds string starting from a null termined C string. */
 sds sdsnew(const char *init) {
-    size_t initlen = (init == NULL) ? 0 : strlen(init);
-    return sdsnewlen(init, initlen);
+    size_t initlen = (init == NULL) ? 0 : strlen(init); // init字符串的长度
+    return sdsnewlen(init, initlen); // 将普通字符串init封装为sdshdr，并返回其中的buf数组引用
 }
 
 /*
@@ -155,7 +159,7 @@ sds sdsdup(const sds s) {
 /* Free an sds string. No operation is performed if 's' is NULL. */
 void sdsfree(sds s) {
     if (s == NULL) return;
-    zfree(s-sizeof(struct sdshdr));
+    zfree(s-sizeof(struct sdshdr)); // 先计算得到sds所在sdshdr的地址，再调用zfree释放空间
 }
 
 // 未使用函数，可能已废弃
@@ -181,7 +185,7 @@ void sdsupdatelen(sds s) {
 }
 
 /*
- * 在不释放 SDS 的字符串空间的情况下，
+ * 在不释放 SDS 的字符串空间的情况下，即不释放buf字符串，只是重置len、free和buf[0]='\0'
  * 重置 SDS 所保存的字符串为空字符串。
  *
  * 复杂度
@@ -223,24 +227,27 @@ void sdsclear(sds s) {
  *  T = O(N)
  */
 sds sdsMakeRoomFor(sds s, size_t addlen) {
-
+    // sh指向s对应的sdshdr，newsh则为扩容后新的sdshdr
     struct sdshdr *sh, *newsh;
 
     // 获取 s 目前的空余空间长度
     size_t free = sdsavail(s);
-
+    // len指s的长度，newlen指扩容后buf的容量
     size_t len, newlen;
 
-    // s 目前的空余空间已经足够，无须再进行扩展，直接返回
+    // 1. s 目前的空余空间已经足够，无须再进行扩展，直接返回
     if (free >= addlen) return s;
 
     // 获取 s 目前已占用空间的长度
     len = sdslen(s);
+    // 获得s所在sdshdr的指针，用于下面进行重新分配内存zrealloc
     sh = (void*) (s-(sizeof(struct sdshdr)));
 
+    // 2. 计算出扩容后新sdshdr中buf的容量
     // s 最少需要的长度
     newlen = (len+addlen);
 
+    // 下面if else虽然很长，实际上是为了更好的计算出扩容后的空间.
     // 根据新长度，为 s 分配新空间所需的大小
     if (newlen < SDS_MAX_PREALLOC)
         // 如果新长度小于 SDS_MAX_PREALLOC 
@@ -249,13 +256,15 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     else
         // 否则，分配长度为目前长度加上 SDS_MAX_PREALLOC
         newlen += SDS_MAX_PREALLOC;
+    
+    // 3. 重新分配内存，buf容量扩容为newlen
     // T = O(N)
     newsh = zrealloc(sh, sizeof(struct sdshdr)+newlen+1);
 
     // 内存不足，分配失败，返回
     if (newsh == NULL) return NULL;
 
-    // 更新 sds 的空余长度
+    // 4.更新 sds 的空余长度. 已使用的长度len不变，而空闲空间free扩容后需要重新计算.
     newsh->free = newlen - len;
 
     // 返回 sds
@@ -431,21 +440,21 @@ sds sdscatlen(sds s, const void *t, size_t len) {
     // 原有字符串长度
     size_t curlen = sdslen(s);
 
-    // 扩展 sds 空间
+    // 1.扩展 sds 空间
     // T = O(N)
-    s = sdsMakeRoomFor(s,len);
+    s = sdsMakeRoomFor(s, len);
 
     // 内存不足？直接返回
     if (s == NULL) return NULL;
 
-    // 复制 t 中的内容到字符串后部
+    // 2.复制 t 中的内容到字符串后部
     // T = O(N)
     sh = (void*) (s-(sizeof(struct sdshdr)));
-    memcpy(s+curlen, t, len);
+    memcpy(s+curlen, t, len); // s+curlen表示字符串s的下一个地址，从s后面开始写入
 
     // 更新属性
-    sh->len = curlen+len;
-    sh->free = sh->free-len;
+    sh->len = curlen+len; // 已有长度加上len
+    sh->free = sh->free-len; // 空闲空间减去len
 
     // 添加新结尾符号
     s[curlen+len] = '\0';
@@ -986,7 +995,7 @@ int sdscmp(const sds s1, const sds s2) {
     l1 = sdslen(s1);
     l2 = sdslen(s2);
     minlen = (l1 < l2) ? l1 : l2;
-    cmp = memcmp(s1,s2,minlen);
+    cmp = memcmp(s1, s2, minlen);
 
     if (cmp == 0) return l1-l2;
 

@@ -387,6 +387,7 @@ int dictRehash(dict *d, int n) {
 
         // 指向该索引的链表表头节点
         de = d->ht[0].table[d->rehashidx];
+
         /* Move all the keys in this bucket from the old to the new hash HT */
         // 将链表中的所有节点迁移到新哈希表
         // T = O(1)
@@ -413,8 +414,10 @@ int dictRehash(dict *d, int n) {
             // 继续处理下个节点. de更新为下一个待处理的节点nextde
             de = nextde;
         }
+
         // 将刚迁移完的哈希表索引的指针设为空
         d->ht[0].table[d->rehashidx] = NULL;
+        
         // 更新 rehash 索引
         d->rehashidx++;
     }
@@ -769,6 +772,8 @@ int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
         // T = O(1)
         while(he) {
             nextHe = he->next;
+
+            // 释放一个节点，需要3连击：1）释放键、2）释放值、3）再释放节点
             // 删除键
             dictFreeKey(d, he);
             // 删除值
@@ -797,15 +802,15 @@ int _dictClear(dict *d, dictht *ht, void(callback)(void *)) {
 
 /* Clear & Release the hash table */
 /*
- * 删除并释放整个字典
+ * 删除并释放整个字典.
  *
  * T = O(N)
  */
 void dictRelease(dict *d)
 {
     // 删除并清空两个哈希表
-    _dictClear(d,&d->ht[0],NULL);
-    _dictClear(d,&d->ht[1],NULL);
+    _dictClear(d, &d->ht[0], NULL);
+    _dictClear(d, &d->ht[1], NULL);
     // 释放节点结构
     zfree(d);
 }

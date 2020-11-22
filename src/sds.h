@@ -49,13 +49,13 @@ typedef char *sds;
  */
 struct sdshdr {
     
-    // buf 中已占用空间的长度
+    // buf 中已占用空间的长度. C字符串并不记录自身的长度信息，因此获取长度必须遍历整个字符串.
     int len;
 
     // buf 中剩余可用空间的长度
     int free;
 
-    // 数据空间
+    // 数据空间. 遵循C字符串以空字符结尾，保存空字符的1字节空间不计算在len里面.
     char buf[];
 };
 
@@ -65,6 +65,9 @@ struct sdshdr {
  * T = O(1)
  */
 static inline size_t sdslen(const sds s) {
+    // 1）s为一个sdshdr对象中的buf数组，指向s自身所在sdshdr对象中的buf数组的地址；
+    // 2）sizeof(struct sdshdr)表示结构体sdshdr类型占用的字节数，实际上是2个int类型的长度之和，结果为8；
+    // 而s-(sizeof(struct sdshdr))，表示s所在sdshdr对象的起始地址。
     struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)));
     return sh->len;
 }
@@ -75,7 +78,7 @@ static inline size_t sdslen(const sds s) {
  * T = O(1)
  */
 static inline size_t sdsavail(const sds s) {
-    struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)));
+    struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr))); // 参考sdslen方法
     return sh->free;
 }
 
