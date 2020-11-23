@@ -40,7 +40,8 @@
 #include <stdarg.h>
 
 /*
- * 类型别名，用于指向 sdshdr 的 buf 属性
+ * 类型别名，用于指向 sdshdr 的 buf 属性.
+ * 其实只是用sds来代表char*指针类型，本身和sdshdr没关系，只是后面被用来指向buf.
  */
 typedef char *sds;
 
@@ -56,6 +57,7 @@ struct sdshdr {
     int free;
 
     // 数据空间. 遵循C字符串以空字符结尾，保存空字符的1字节空间不计算在len里面.
+    // 实际容量=len+free+1
     char buf[];
 };
 
@@ -82,16 +84,24 @@ static inline size_t sdsavail(const sds s) {
     return sh->free;
 }
 
+// 根据给定的初始化字符串 init 和字符串长度 initlen，
+// 创建一个新的 sds, buf数组的长度为 initlen+1. 也可用于字符串复制
 sds sdsnewlen(const void *init, size_t initlen);
+// 根据给定的普通C字符串 init ，创建一个包含同样字符串的 sds
 sds sdsnew(const char *init);
 sds sdsempty(void);
 size_t sdslen(const sds s);
+// 复制给定的sds，直接使用sdsnewlen实现
 sds sdsdup(const sds s);
+// 释放指定的sds. 1.计算sdshdr的地址 2.调用zfree()方法释放sdshdr
 void sdsfree(sds s);
 size_t sdsavail(const sds s);
 sds sdsgrowzero(sds s, size_t len);
+// 将长度为 len 的字符串 t 追加到 sds 的字符串末尾
 sds sdscatlen(sds s, const void *t, size_t len);
+// 将给定字符串 t 追加到 sds s 的末尾
 sds sdscat(sds s, const char *t);
+// 将给定的 sds t 追加到另一个 sds s 的末尾
 sds sdscatsds(sds s, const sds t);
 sds sdscpylen(sds s, const char *t, size_t len);
 sds sdscpy(sds s, const char *t);
@@ -108,6 +118,7 @@ sds sdscatfmt(sds s, char const *fmt, ...);
 sds sdstrim(sds s, const char *cset);
 void sdsrange(sds s, int start, int end);
 void sdsupdatelen(sds s);
+// 重置sdshdr，但不释放空间. 即free加上len、len置为0、buf[0]='\0'.
 void sdsclear(sds s);
 int sdscmp(const sds s1, const sds s2);
 sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count);
@@ -121,6 +132,7 @@ sds sdsmapchars(sds s, const char *from, const char *to, size_t setlen);
 sds sdsjoin(char **argv, int argc, char *sep);
 
 /* Low level functions exposed to the user API */
+// 对sds进行扩容，确保buf的空闲长度free大于等于addlen
 sds sdsMakeRoomFor(sds s, size_t addlen);
 void sdsIncrLen(sds s, int incr);
 sds sdsRemoveFreeSpace(sds s);

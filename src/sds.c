@@ -72,7 +72,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
     // T = O(N)
     if (init) {
         // zmalloc 不初始化所分配的内存. 长度为：sdshdr中2个int字段的长度 + init字符串的长度 + 预留1个空字符
-        sh = zmalloc(sizeof(struct sdshdr)+initlen+1);
+        sh = zmalloc(sizeof(struct sdshdr)+initlen+1); // 【分配内存】
     } else {
         // zcalloc 将分配的内存全部初始化为 0
         sh = zcalloc(sizeof(struct sdshdr)+initlen+1);
@@ -91,12 +91,12 @@ sds sdsnewlen(const void *init, size_t initlen) {
     // 如果有指定初始化内容，将它们复制到 sdshdr 的 buf 中
     // T = O(N)
     if (initlen && init)
-        memcpy(sh->buf, init, initlen);
+        memcpy(sh->buf, init, initlen); // 【复制】
     // 以 \0 结尾
     sh->buf[initlen] = '\0';
 
     // 返回 buf 部分，而不是整个 sdshdr
-    return (char*)sh->buf;
+    return (char*)sh->buf; // 【返回buf】
 }
 
 /*
@@ -116,7 +116,7 @@ sds sdsempty(void) {
 }
 
 /*
- * 根据给定字符串 init ，创建一个包含同样字符串的 sds
+ * 根据给定的普通C字符串 init ，创建一个包含同样字符串的 sds
  *
  * 参数
  *  init ：如果输入为 NULL ，那么创建一个空白 sds
@@ -151,7 +151,7 @@ sds sdsdup(const sds s) {
 }
 
 /*
- * 释放给定的 sds
+ * 释放给定的 sds. 1.计算sdshdr的地址 2.调用zfree()方法释放sdshdr
  *
  * 复杂度
  *  T = O(N)
@@ -185,6 +185,7 @@ void sdsupdatelen(sds s) {
 }
 
 /*
+ * 重置sdshdr，但不释放空间. 即free加上len、len置为0、buf[0]='\0'.
  * 在不释放 SDS 的字符串空间的情况下，即不释放buf字符串，只是重置len、free和buf[0]='\0'
  * 重置 SDS 所保存的字符串为空字符串。
  *
@@ -215,6 +216,7 @@ void sdsclear(sds s) {
  * Note: this does not change the *length* of the sds string as returned
  * by sdslen(), but only the free buffer space we have. */
 /*
+ * 对sds进行扩容，确保buf的空闲长度free大于等于addlen.
  * 对 sds 中 buf 的长度进行扩展，确保在函数执行之后，
  * buf 至少会有 addlen + 1 长度的空余空间
  * （额外的 1 字节是为 \0 准备的）
@@ -236,7 +238,7 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     size_t len, newlen;
 
     // 1. s 目前的空余空间已经足够，无须再进行扩展，直接返回
-    if (free >= addlen) return s;
+    if (free >= addlen) return s; // 【空间足够】
 
     // 获取 s 目前已占用空间的长度
     len = sdslen(s);
@@ -245,7 +247,7 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
 
     // 2. 计算出扩容后新sdshdr中buf的容量
     // s 最少需要的长度
-    newlen = (len+addlen);
+    newlen = (len+addlen); // 【最少容量】
 
     // 下面if else虽然很长，实际上是为了更好的计算出扩容后的空间.
     // 根据新长度，为 s 分配新空间所需的大小
@@ -259,13 +261,13 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
     
     // 3. 重新分配内存，buf容量扩容为newlen
     // T = O(N)
-    newsh = zrealloc(sh, sizeof(struct sdshdr)+newlen+1);
+    newsh = zrealloc(sh, sizeof(struct sdshdr)+newlen+1); // 【重分配内存】
 
     // 内存不足，分配失败，返回
     if (newsh == NULL) return NULL;
 
     // 4.更新 sds 的空余长度. 已使用的长度len不变，而空闲空间free扩容后需要重新计算.
-    newsh->free = newlen - len;
+    newsh->free = newlen - len; // 【更新空闲空间】
 
     // 返回 sds
     return newsh->buf;
@@ -442,7 +444,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
     // 1.扩展 sds 空间
     // T = O(N)
-    s = sdsMakeRoomFor(s, len);
+    s = sdsMakeRoomFor(s, len); // 【扩容】
 
     // 内存不足？直接返回
     if (s == NULL) return NULL;
@@ -450,9 +452,10 @@ sds sdscatlen(sds s, const void *t, size_t len) {
     // 2.复制 t 中的内容到字符串后部
     // T = O(N)
     sh = (void*) (s-(sizeof(struct sdshdr)));
-    memcpy(s+curlen, t, len); // s+curlen表示字符串s的下一个地址，从s后面开始写入
+    // s+curlen表示字符串s的下一个地址，从s后面开始写入. 【复制】
+    memcpy(s+curlen, t, len);
 
-    // 更新属性
+    // 更新属性. 【更新】
     sh->len = curlen+len; // 已有长度加上len
     sh->free = sh->free-len; // 空闲空间减去len
 
@@ -464,7 +467,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 }
 
 /*
- * 将给定字符串 t 追加到 sds 的末尾
+ * 将给定字符串 t 追加到 sds s 的末尾
  * 
  * 返回值
  *  sds ：追加成功返回新 sds ，失败返回 NULL
@@ -481,7 +484,7 @@ sds sdscat(sds s, const char *t) {
 }
 
 /*
- * 将另一个 sds 追加到一个 sds 的末尾
+ * 将另一个 sds 追加到一个 sds 的末尾. 将给定的 sds t 追加到另一个 sds s 的末尾
  * 
  * 返回值
  *  sds ：追加成功返回新 sds ，失败返回 NULL
